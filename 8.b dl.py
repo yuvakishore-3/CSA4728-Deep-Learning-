@@ -1,0 +1,43 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import jaccard_score
+image = np.zeros((400, 400, 3), dtype=np.uint8)
+cv2.circle(image, (150, 150), 50, (255, 0, 0), -1)  
+cv2.rectangle(image, (250, 100), (350, 200), (0, 255, 0), -1)  
+ground_truth = np.zeros((400, 400), dtype=np.uint8)
+cv2.circle(ground_truth, (150, 150), 50, 1, -1)  
+cv2.rectangle(ground_truth, (250, 100), (350, 200), 2, -1)  
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+_, binary = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
+kernel = np.ones((3, 3), np.uint8)
+sure_bg = cv2.dilate(binary, kernel, iterations=3)
+dist_transform = cv2.distanceTransform(binary, cv2.DIST_L2, 5)
+_, sure_fg = cv2.threshold(dist_transform, 0.7 * dist_transform.max(), 255, 0)
+sure_fg = np.uint8(sure_fg)
+unknown = cv2.subtract(sure_bg, sure_fg)
+_, markers = cv2.connectedComponents(sure_fg)
+markers = markers + 1
+markers[unknown == 255] = 0
+markers = cv2.watershed(image, markers)
+image[markers == -1] = [255, 0, 0]  
+plt.figure(figsize=(12, 6))
+plt.subplot(1, 3, 1)
+plt.title('Original Image')
+plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+plt.axis('off')
+plt.subplot(1, 3, 2)
+plt.title('Binary Image')
+plt.imshow(binary, cmap='gray')
+plt.axis('off')
+plt.subplot(1, 3, 3)
+plt.title('Segmented Image')
+plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+plt.axis('off')
+plt.show()
+segmented_mask = np.where(markers == -1, 1, 0).astype(np.uint8)
+iou_circle = jaccard_score(ground_truth.flatten(), segmented_mask.flatten(), labels=[1], average='binary')
+iou_rectangle = jaccard_score(ground_truth.flatten(), segmented_mask.flatten(), labels=[2], average='binary')
+print(f'Intersection over Union (IoU) for Circle: {iou_circle:.4f}')
+print(f'Intersection over Union (IoU) for Rectangle: {iou_rectangle:.4f}')
